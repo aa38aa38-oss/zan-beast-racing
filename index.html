@@ -111,6 +111,22 @@ ol.list em{font-style:normal;font-size:14px;color:var(--mute);font-family:var(--
 @media (prefers-reduced-motion:reduce){.slot.has:first-child{animation:none}#streaks{display:none}}
 #spick{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
 #spick button[aria-disabled="true"]{filter:grayscale(1) brightness(.4);cursor:default}
+#spick.glow{padding:6px;border:3px dashed var(--pen);border-radius:14px;background:#fff8c9;animation:glow .8s ease-in-out infinite alternate}
+@keyframes glow{to{box-shadow:0 0 0 5px var(--hi);border-color:#e8452c}}
+#spick button.new::after{content:'NEW';position:absolute;top:0;right:0;font-family:var(--num);font-size:11px;line-height:1;background:#e8452c;color:#fff;padding:2px 3px;border-radius:0 0 0 7px}
+#swapTag{font-size:15px;line-height:1.2;color:var(--pen);text-align:center;animation:bob .7s ease-in-out infinite alternate}
+#swapTag[hidden]{display:none}
+@keyframes bob{to{transform:translateY(4px)}}
+#rays{position:absolute;inset:-60%;pointer-events:none;display:none;background:repeating-conic-gradient(from 0deg,rgba(255,225,77,.55) 0 9deg,transparent 9deg 18deg);
+  -webkit-mask-image:radial-gradient(circle,transparent 14%,#000 30%,transparent 62%);mask-image:radial-gradient(circle,transparent 14%,#000 30%,transparent 62%);animation:spin 14s linear infinite}
+#stage.unl #rays{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+#unlName{font-size:clamp(44px,15vw,92px)}
+#unlCard{grid-template-columns:84px 1fr;align-items:center}
+#unlCard.pop{animation:tpop .3s ease-out}
+#unlImg{width:84px;height:84px;border-radius:12px;border:3px solid var(--ink);object-fit:cover;background:#3f3f3f}
+#unlQuote{font-size:24px;line-height:1.3}
+#unlCard .go{grid-column:1/-1}
 #stages{display:grid;gap:6px}
 .stg{display:flex;align-items:center;gap:8px;text-align:left;font-family:var(--display);font-size:17px;line-height:1.2;padding:5px 10px;border:3px solid var(--ink);border-radius:12px;background:var(--paper);color:var(--ink);cursor:pointer}
 .stg b{font-family:var(--num);font-size:26px;color:var(--pen);font-weight:400;width:.8em;flex:none}
@@ -133,12 +149,13 @@ ol.list em{font-style:normal;font-size:14px;color:var(--mute);font-family:var(--
 #maps button{font-family:var(--display);font-size:14px;line-height:1.2;padding:4px 2px 5px;border:3px solid var(--ink);border-radius:10px;background:var(--paper);color:var(--ink);cursor:pointer}
 #maps button[aria-checked="true"]{background:var(--pen);color:var(--paper)}
 #maps button:disabled{cursor:default}
-@media (prefers-reduced-motion:reduce){#talkBox.pop{animation:none}}
+@media (prefers-reduced-motion:reduce){#talkBox.pop,#unlCard.pop,#spick.glow,#swapTag,#rays{animation:none}}
 </style>
 </head>
 <body>
 <div id="stage">
   <canvas id="gl"></canvas>
+  <div id="rays"></div>
   <div id="streaks"></div>
 
   <div id="hud" hidden>
@@ -171,6 +188,7 @@ ol.list em{font-style:normal;font-size:14px;color:var(--mute);font-family:var(--
     <header><h1 class="out">故事模式</h1></header>
     <div class="card stk">
       <p class="hint">選一台已解鎖的車，再選關卡。每一關都要拿第一名才能過關。</p>
+      <p id="swapTag" hidden>▼ 點頭像可以換車 ▼</p>
       <div id="spick" role="radiogroup" aria-label="選一台車"></div>
       <div id="stages"></div>
       <button class="go alt" id="storyBack" type="button">回主選單</button>
@@ -184,6 +202,15 @@ ol.list em{font-style:normal;font-size:14px;color:var(--mute);font-family:var(--
       <img id="talkImg" alt="">
       <div><b id="talkName"></b><p id="talkText"></p></div>
       <div class="row"><button class="go alt" id="skipBtn" type="button">跳過</button><button class="go" id="nextBtn" type="button">繼續</button></div>
+    </div>
+  </section>
+
+  <section id="unlock" class="screen" hidden>
+    <header><p class="tag out">新角色解鎖！</p><h1 class="out" id="unlName"></h1></header>
+    <div class="card stk" id="unlCard">
+      <img id="unlImg" alt="">
+      <p id="unlQuote"></p>
+      <button class="go" id="unlBtn" type="button">太神啦</button>
     </div>
   </section>
 
@@ -231,102 +258,94 @@ function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;
 
 /* ================= stages and tracks ================= */
 var W=9, RW=10.2, N=720, LAPS=3, NCAR=6, SCW=3.5, AIR_T=0.95;
-var L,PX,PZ,TX,TZ,K,CL,BR=[],FEAT=null,stageIdx=-1,ST=null;
+var L,PX,PZ,TX,TZ,K,CL,WH,NAR=null,BR=[],FEAT=null,stageIdx=-1,ST=null;
 var NAMES={nar:'旁白',zan:'讚獸',uccu:'UCCU',look:'看什麼看',oka:'OK阿',shuang:'你爽就好',thx:'多謝',bug:'塗鴉蟲',wed:'結婚94爽'};
 var PROLOGUE=[
- ['nar','塗鴉大陸，是一支麥克筆畫出來的世界。風、火、水、土四顆元素結晶，讓這裡的顏色永遠鮮豔。'],
- ['nar','直到那一天——魔王「結婚94爽」搶走了四顆結晶，要把全世界困在一場永遠不散場的婚禮裡。'],
- ['nar','顏色開始褪去。只剩一隻還敢比讚的小怪獸，發動了牠的螺旋輪。'],
- ['zan','世界變成灰色的，一點都不讚！我要把元素一顆一顆贏回來！']
+ ['nar','元素被搶了'],
+ ['nar','世界變灰了'],
+ ['zan','不讚 👎']
 ];
+var QUOTE={uccu:'UCCU 看看你',look:'看什麼看',oka:'OK阿',shuang:'你爽就好',thx:'多謝',bug:'＃＠％＆！！',wed:'結婚94爽！'};
 var STAGES=[
- {name:'風之草原',short:'草原',el:4,items:[4],boss:['uccu'],bossBase:[57.5],
+ {name:'風之草原',short:'草原',el:4,items:[4],boss:['uccu'],bossBase:[60.5],
   ctrl:[[0,-70],[0,50],[0,165],[42,262],[150,300],[246,256],[264,150],[206,84],[214,-6],[292,-70],[286,-172],[190,-218],[92,-236],[16,-186],[0,-125]],
   center:[130,30],boxes:[95,280,455,600,730,905,1090,1250,1400],pads:[185,520,820,1160,1330],
   theme:{sky:['#3d9bf0','#8fd0ff','#d4f1ff'],fog:'#d4f1ff',ground:'#90e062',road:'#ffffff',mount:'#b9d6ff',trees:['#ff9ec4','#ffb347','#7fe3c0','#fff27a','#c9a2ff'],bush:'#3fb950'},
   intro:[
-   ['uccu','UCCU～看看你，輪子那麼小，也想碰風之結晶？'],
-   ['zan','你就是風的守護者？把結晶還來！'],
-   ['uccu','想要？那就追上我啊。在風之草原，沒有人看得到我的車尾燈。'],
-   ['zan','那我就讓你看看我的大拇指！比三圈，贏的人拿走風！'],
-   ['nar','【風元素】撞「？」箱取得，按右邊的圓鈕發動，瞬間加速。要拿第一名才能過關！']],
+   ['uccu','UCCU'],
+   ['zan','蛤？'],
+   ['uccu','看看你 5555555'],
+   ['zan','關你屁事'],
+   ['nar','風＝加速。撞「？」，按右邊圓鈕']],
   win:[
-   ['uccu','不可能…我居然被比讚的追過去了…'],
-   ['zan','你跑得很快。但你只看得到別人慢，看不到自己還能更快。'],
-   ['uccu','…UCCU，這次換我看看我自己。風之結晶給你，我也跟你走！'],
-   ['nar','取得【風之結晶】！UCCU 加入了隊伍！']]},
- {name:'火焰峽谷',short:'峽谷',el:1,items:[4,1],boss:['look'],bossBase:[57.8],
-  polar:{n:40,r0:232,h:[[2,42,0.3],[3,28,1.2]]},center:[0,0],ramps:5,npads:3,
+   ['uccu','是喔是喔是喔'],
+   ['zan','讚喔 👍'],
+   ['uccu','太神啦'],
+   ['nar','拿到風！UCCU 入隊']]},
+ {name:'火焰峽谷',short:'峽谷',el:1,items:[4,1],boss:['look'],bossBase:[62.5],
+  polar:{n:64,r0:232,h:[[3,30,0.3],[6,24,1.2]]},center:[0,0],ramps:5,npads:3,
   theme:{sky:['#e8562a','#ffa24d','#ffe0a8'],fog:'#ffe0a8',ground:'#eaa458',road:'#fff1e6',mount:'#e07f45',trees:['#f0452c','#ffb347','#ffd92e','#ff7a59'],bush:'#c9552a'},
   intro:[
-   ['nar','火焰峽谷。空氣熱到連麥克筆的墨水都要沸騰，路上到處是跳台。'],
-   ['look','看什麼看！沒看過這麼帥的牙齒嗎！'],
-   ['zan','我是來拿火之結晶的。'],
-   ['look','哈！結婚94爽大人說了，誰敢靠近就把誰烤成焦炭。再看？再看我就噴火！'],
-   ['uccu','小心，牠的火會燒到身邊一整圈的車。地上的紅圈就是火的範圍。'],
-   ['zan','那我也用火！衝上跳台，飛過去！'],
-   ['nar','【火元素】在自己周圍炸出一圈火焰，圈內的對手會原地打轉。衝上跳台可以飛起來加速！']],
+   ['look','看什麼看'],
+   ['zan','沒有啊'],
+   ['look','再看？噴火喔'],
+   ['uccu','早餐吃到飽！'],
+   ['look','關我屁事'],
+   ['nar','火＝燒身邊一圈。跳台會飛']],
   win:[
-   ['look','可、可惡…你那是什麼眼神！'],
-   ['zan','是佩服的眼神。你的火很猛，給你一個讚。'],
-   ['look','…哼。很久沒有人敢這樣直直看著我了。火之結晶拿去，我也要去看看那個魔王的臉！'],
-   ['nar','取得【火之結晶】！看什麼看 加入了隊伍！']]},
- {name:'水之群島',short:'群島',el:2,items:[4,1,2],boss:['oka','shuang'],bossBase:[60,59],
+   ['look','可惡'],
+   ['zan','讚喔 👍'],
+   ['look','…看什麼看'],
+   ['nar','拿到火！看什麼看 入隊']]},
+ {name:'水之群島',short:'群島',el:2,items:[4,1,2],boss:['oka','shuang'],bossBase:[62.3,61.3],
   polar:{n:60,r0:218,h:[[5,43,0],[2,14,0.7]]},center:[0,0],sc:[[0,1],[2,3]],npads:3,
   theme:{sky:['#1f8fd6','#5fd0f0','#d0f8ff'],fog:'#d0f8ff',ground:'#52c8e4',road:'#f0fbff',mount:'#86e0cc',trees:['#3fd0a0','#7fe3c0','#fff27a','#5fb8ff'],bush:'#2fa87a'},
   intro:[
-   ['nar','水之群島。彎道一個接一個，島跟島之間藏著只容一台車通過的小徑。'],
-   ['oka','要比賽？OK阿。'],
-   ['shuang','要搶結晶？你爽就好～反正最後哭的不是我。'],
-   ['zan','你們兩個…到底有沒有要認真守？'],
-   ['oka','魔王叫我們守，我們就守，OK阿。'],
-   ['shuang','世界變灰也沒差，隨波逐流最輕鬆了～'],
-   ['zan','才不是沒差！我要讓你們想起來，全力衝刺才是最爽的事！'],
-   ['nar','【水元素】高壓水柱會自動追打你前方最近的對手。靠邊開進黃色小徑可以抄近路，但路很窄！']],
+   ['oka','OK阿'],
+   ['shuang','你爽就好'],
+   ['zan','認真一點啦'],
+   ['shuang','隨便啦'],
+   ['oka','颱風天就是要泛舟啊'],
+   ['zan','不然要幹嘛'],
+   ['nar','水＝追打前面那台。黃色岔路是近路']],
   win:[
-   ['oka','…輸了。可是心跳得好快。這種感覺，OK阿！'],
-   ['shuang','原來認真起來這麼爽…不是你爽就好，是大家一起爽才好！'],
-   ['zan','這才對！一起去把顏色搶回來！'],
-   ['nar','取得【水之結晶】！OK阿、你爽就好 加入了隊伍！']]},
- {name:'土之遺跡',short:'遺跡',el:3,items:[4,1,2,3],boss:['thx','bug'],bossBase:[61.5,60.5],
+   ['oka','輸了，OK阿'],
+   ['shuang','你爽就好'],
+   ['zan','一起爽啦'],
+   ['nar','拿到水！OK阿、你爽就好 入隊']]},
+ {name:'土之遺跡',short:'遺跡',el:3,items:[4,1,2,3],boss:['thx','bug'],bossBase:[62.5,61.5],
   polar:{n:60,r0:222,h:[[3,40,0.4],[7,18,0]]},center:[0,0],npads:3,nmuds:4,nmovers:4,
   theme:{sky:['#d9a441','#f2d27a','#fbeec2'],fog:'#fbeec2',ground:'#cfa765',road:'#fff6e0',mount:'#b98f56',trees:['#a9743c','#d9b36a','#8aa04a','#e8c98a'],bush:'#7d8a3a'},
   intro:[
-   ['nar','土之遺跡。泥沼會拖住輪子，巨大的土柱在路上來回滑動。'],
-   ['thx','多謝光臨。多謝各位遠道而來。'],
-   ['zan','你人還滿客氣的嘛。'],
-   ['thx','多謝誇獎。也多謝你們，特地把前三顆結晶送上門。'],
-   ['bug','＃＠％～＆＊！！'],
-   ['thx','牠說：「這裡的陷阱都是我畫的，掉進去就別想出來。」多謝配合。'],
-   ['look','這兩個，一個笑裡藏刀，一個根本聽不懂！'],
-   ['zan','沒關係，賽道上不用翻譯！來吧！'],
-   ['nar','【土元素】在身後立起一道土牆，擋住後面的車。小心泥沼和會移動的土柱！四種元素到齊了！']],
+   ['thx','多謝'],
+   ['zan','謝什麼？'],
+   ['thx','多謝送頭'],
+   ['bug','＃＠％＆！！'],
+   ['thx','牠說：閉嘴啦'],
+   ['zan','你不是會員，請你離開'],
+   ['nar','土＝身後立牆。地上的泥巴超黏']],
   win:[
-   ['thx','…多謝指教。這一句，是真心的。'],
-   ['bug','～♪＠＃…讚。'],
-   ['uccu','欸！牠會講話！'],
-   ['thx','牠說，很久沒有人陪牠把一場比賽畫完了。土之結晶請收下，我們也一起去。'],
-   ['nar','取得【土之結晶】！多謝、塗鴉蟲 加入了隊伍！四顆結晶一起指向了天空——']]},
- {name:'天空婚禮聖殿',short:'聖殿',el:0,items:[4,1,2,3],boss:['wed'],bossBase:[63],
-  polar:{n:72,r0:236,h:[[4,32,0.3],[9,14.5,1.0]]},center:[0,0],cliff:true,ramps:2,npads:3,nmuds:3,nmovers:4,
+   ['thx','多謝指教'],
+   ['bug','…讚'],
+   ['uccu','太神啦'],
+   ['nar','拿到土！多謝、塗鴉蟲 入隊']]},
+ {name:'天空婚禮聖殿',short:'聖殿',el:0,items:[4,1,2,3],boss:['wed'],bossBase:[64.5],
+  polar:{n:72,r0:236,h:[[4,32,0.3],[9,14.5,1.0]]},center:[0,0],cliff:true,narrow:true,ramps:2,npads:3,nmuds:3,nmovers:4,
   theme:{sky:['#3b2a8f','#b06ad6','#ffc2dc'],fog:'#ffc2dc',ground:'#ffd9ec',road:'#ffe6f3',mount:'#c891ea',trees:['#ff5c8a','#ff9ec4','#ffffff','#ffd92e'],bush:null,groundY:-90},
   intro:[
-   ['nar','天空婚禮聖殿。賽道懸在雲海之上，彎道沒有護欄，衝出去就是萬丈深淵。'],
-   ['wed','歡迎來到我的婚禮！結婚94爽！我要讓全世界永遠停在最爽的這一刻！'],
-   ['zan','把大家困在同一天，那不叫爽，那叫卡住！'],
-   ['wed','住口！只要時間不往前，就沒有人會離開、沒有派對會散場！'],
-   ['thx','魔王大人…其實只是怕大家走掉。'],
-   ['zan','那我就用這場比賽告訴你——往前衝，才會遇到下一件很讚的事！'],
-   ['wed','口氣不小！那就在懸崖上分出勝負。輸的人，永遠留在這裡當我的賓客！'],
-   ['nar','最終決戰！彎道沒有護欄，衝太快會掉下懸崖。拿下第一名，拯救塗鴉大陸！']],
+   ['wed','結婚94爽！'],
+   ['zan','是喔'],
+   ['wed','全世界都給我結'],
+   ['zan','關我屁事'],
+   ['wed','舔、又舔、又舔、又舔嘴唇！'],
+   ['shuang','隨便啦'],
+   ['nar','魔王關。彎道沒護欄，窄路更危險']],
   win:[
-   ['wed','我的婚禮…停下來了…'],
-   ['zan','沒有停。你看，大家都還在這裡。'],
-   ['wed','你們…不走嗎？'],
-   ['zan','派對會散場，但明天可以再開一場。這個，給你。（比讚）'],
-   ['wed','…結婚94爽。但是，一起往前跑，好像更爽。'],
-   ['nar','四顆元素結晶回到了天空，顏色重新流進塗鴉大陸的每一條線。'],
-   ['nar','恭喜破關！八隻角色全部解鎖，快去找朋友連線對戰吧！']]}
+   ['wed','我的婚禮…'],
+   ['zan','讚喔 👍'],
+   ['wed','一起跑，94爽'],
+   ['uccu','太神啦'],
+   ['nar','世界變回彩色。全員解鎖！']]}
 ];
 function polarPts(p){var pts=[],i,j;for(i=0;i<p.n;i++){var th=i/p.n*Math.PI*2,r=p.r0;for(j=0;j<p.h.length;j++)r+=p.h[j][1]*Math.sin(p.h[j][0]*th+p.h[j][2]);pts.push([r*Math.cos(th),r*Math.sin(th)]);}return pts;}
 function rot(a,k){var o=new Float32Array(N);for(var i=0;i<N;i++)o[i]=a[(i+k)%N];return o;}
@@ -353,6 +372,14 @@ function buildTrack(st){
   /* cliffs: every real bend loses its guard rail */
   CL=new Uint8Array(N);
   if(st.cliff)for(i=0;i<N;i++){var mk=0;for(q=-5;q<=5;q++)mk=Math.max(mk,Math.abs(K[(i+q+N)%N]));var sd=i*ds;CL[i]=(mk>0.0085&&sd>60&&sd<L-50)?1:0;}
+  /* the final stage squeezes its twistiest stretch: narrower, and no rails at all */
+  WH=new Float32Array(N);for(i=0;i<N;i++)WH[i]=W;NAR=null;
+  if(st.narrow){
+    var span=Math.round(240/ds),bi=0,bv=-1,lo=Math.round(150/ds),hi2=N-span-Math.round(130/ds),e;
+    for(i=lo;i<hi2;i++){var sum=0;for(q=0;q<span;q+=2)sum+=Math.abs(K[i+q]);if(sum>bv){bv=sum;bi=i;}}
+    for(q=-12;q<span+12;q++){e=q<0?(q+12)/12:q>=span?(span+12-q)/12:1;WH[bi+q]=W-(W-5.2)*e;if(e>=0.5)CL[bi+q]=1;}
+    NAR={s0:bi*ds,s1:(bi+span)*ds};
+  }
   /* shortcuts: a narrow lane that cuts straight across the base of a bulge */
   BR=[];
   if(st.sc){
@@ -392,6 +419,7 @@ function SP(dist,br,o){
 function mod(a){return ((a%L)+L)%L;}
 function wrapD(a){return ((a+L/2)%L+L)%L-L/2;}
 function sampleIdx(s){return Math.floor(mod(s)/L*N)%N;}
+function wAt(dist){return WH[sampleIdx(dist)];}
 var sA={},sB={},sC={};
 /* the n straightest places on the lap, at least gap apart and clear of what is already placed */
 function spots(n,gap,avoid){
@@ -401,7 +429,8 @@ function spots(n,gap,avoid){
   for(i=0;i<sc.length&&out.length<n;i++){var s=sc[i][1]*ds,ok=s>100&&s<L-80;
     for(q=0;ok&&q<out.length;q++)if(Math.abs(wrapD(out[q]-s))<gap)ok=false;
     for(q=0;ok&&q<avoid.length;q++)if(Math.abs(wrapD(avoid[q]-s))<42)ok=false;
-    for(q=0;ok&&q<BR.length;q++)if(s>BR[q].s0-50&&s<BR[q].s0+30)ok=false;
+    for(q=0;ok&&q<BR.length;q++)if(s>BR[q].s0-80&&s<BR[q].s0+30)ok=false;
+    if(NAR&&s>NAR.s0-40&&s<NAR.s1+40)ok=false;
     if(ok)out.push(s);}
   out.sort(function(a,b){return a-b;});return out;
 }
@@ -416,7 +445,10 @@ function layoutStage(st,idx){
   if(st.boxes)f.boxes=st.boxes.slice();
   else{var n=Math.round(L/175);for(i=0;i<n;i++){var s=95+i*(L-140)/n,q,moved=true,g=0;
     while(moved&&g++<6){moved=false;for(q=0;q<used.length;q++)if(Math.abs(wrapD(used[q]-s))<16){s+=20;moved=true;}}
-    f.boxes.push(s);}}
+    /* never right after a ramp: a jumping car would fly over the boxes */
+    for(q=0;q<f.ramps.length;q++){var dr=wrapD(s-f.ramps[q].s);if(dr>-10&&dr<105)s=f.ramps[q].s-26;}
+    for(q=0,moved=false;q<f.boxes.length;q++)if(Math.abs(wrapD(f.boxes[q]-s))<30)moved=true;
+    if(!moved)f.boxes.push(s);}}
   return f;
 }
 
@@ -622,7 +654,18 @@ var signTex=(function(){
   x.lineCap='round';x.strokeStyle='#fff';x.lineWidth=30;x.beginPath();x.moveTo(128,246);x.lineTo(128,150);x.stroke();
   x.strokeStyle=INKC;x.lineWidth=14;x.beginPath();x.moveTo(128,246);x.lineTo(128,150);x.stroke();
   stickerPoly(x,[[26,24],[230,24],[230,150],[26,150]],'#ffd92e');
-  x.fillStyle=INKC;x.font='bold 62px "PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText('小徑',128,92);
+  x.fillStyle=INKC;x.font='bold 62px "PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText('近路',128,92);
+  return tex(c);
+})();
+
+var arrowTex=(function(){
+  var c=cv(256,256),x=c.getContext('2d'),i;x.lineCap='round';x.lineJoin='round';
+  for(i=0;i<3;i++){var y=30+i*72,p=[[46,y],[128,y+62],[210,y]];poly(x,p);x.strokeStyle=INKC;x.lineWidth=42;x.stroke();poly(x,p);x.strokeStyle='#ffd92e';x.lineWidth=24;x.stroke();}
+  return tex(c);
+})();
+var archTex=(function(){
+  var c=cv(256,64),x=c.getContext('2d');x.fillStyle='#ffd92e';x.fillRect(0,0,256,64);x.strokeStyle=INKC;x.lineWidth=8;x.strokeRect(0,0,256,64);
+  x.fillStyle=INKC;x.font='bold 44px "PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText('近路',128,35);
   return tex(c);
 })();
 
@@ -837,14 +880,14 @@ function wt(t){worldTex.push(t);return t;}
 function ribbonGeo(n,closed,at,halfW,y,vRep){
   /* at(i,o) fills o.x,o.z,o.rx,o.rz for row i */
   var pos=[],uv=[],idx=[],o={},rows=closed?n+1:n,i;
-  for(i=0;i<rows;i++){at(i%n,o);pos.push(o.x-o.rx*halfW,y,o.z-o.rz*halfW,o.x+o.rx*halfW,y,o.z+o.rz*halfW);var v=i/(rows-1)*vRep;uv.push(0,v,1,v);
+  for(i=0;i<rows;i++){at(i%n,o);var hw=halfW||o.hw;pos.push(o.x-o.rx*hw,y,o.z-o.rz*hw,o.x+o.rx*hw,y,o.z+o.rz*hw);var v=i/(rows-1)*vRep;uv.push(0,v,1,v);
     if(i<rows-1){var a=2*i;idx.push(a,a+1,a+2,a+1,a+3,a+2);}}
   var g=new THREE.BufferGeometry();
   g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));
   g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(uv),2));
   g.setIndex(new THREE.BufferAttribute(new Uint16Array(idx),1));return g;
 }
-function mainAt(i,o){o.x=PX[i];o.z=PZ[i];o.rx=-TZ[i];o.rz=TX[i];}
+function mainAt(i,o){o.x=PX[i];o.z=PZ[i];o.rx=-TZ[i];o.rz=TX[i];o.hw=WH[i]+1.2;}
 function decal(texture,w,l,s,x,y,off){
   var pg=new THREE.PlaneGeometry(w,l);pg.rotateX(-Math.PI/2);
   var m=new THREE.Mesh(pg,wm(new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:off,polygonOffsetUnits:off})));
@@ -868,22 +911,29 @@ function loadStage(idx){
   horizonMat.color.set(th.mount);sunSp.visible=!ST.cliff;
 
   /* road */
-  world.add(new THREE.Mesh(ribbonGeo(N,true,mainAt,RW,0,Math.round(L/16)),wm(new THREE.MeshBasicMaterial({map:roadTex,color:new THREE.Color(th.road),side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}))));
+  world.add(new THREE.Mesh(ribbonGeo(N,true,mainAt,0,0,Math.round(L/16)),wm(new THREE.MeshBasicMaterial({map:roadTex,color:new THREE.Color(th.road),side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}))));
   BR.forEach(function(b){
     world.add(new THREE.Mesh(ribbonGeo(b.M,false,function(k,o){o.x=b.X[k];o.z=b.Z[k];o.rx=-b.TZ[k];o.rz=b.TX[k];},SCW+0.5,0.03,Math.round(b.len/8)),
       wm(new THREE.MeshBasicMaterial({map:laneTex,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}))));
-    var sg=new THREE.Sprite(wm(new THREE.SpriteMaterial({map:signTex,alphaTest:0.5})));sg.scale.set(7,7,1);sg.center.set(0.5,0);
-    S(b.s0-4,sA);sg.position.set(sA.x+sA.rx*b.side*(RW+3.5),0,sA.z+sA.rz*b.side*(RW+3.5));world.add(sg);
+    /* make the fork impossible to miss: two tall signs, arrows painted on the road, an arch over the lane */
+    var sgm=wm(new THREE.SpriteMaterial({map:signTex,alphaTest:0.5}));
+    [[-70,11],[-8,11]].forEach(function(sv){var sg=new THREE.Sprite(sgm);sg.scale.set(sv[1],sv[1],1);sg.center.set(0.5,0);
+      S(b.s0+sv[0],sA);sg.position.set(sA.x+sA.rx*b.side*(RW+4),0,sA.z+sA.rz*b.side*(RW+4));world.add(sg);});
+    [-78,-58,-38,-18].forEach(function(dd){decal(arrowTex,5.2,8,b.s0+dd,b.xe,0.06,-3);});
+    var aj=Math.round(b.M*0.1),arch=new THREE.Group(),ap=merge([T(new THREE.CylinderGeometry(0.3,0.3,7,8),[SCW+1.4,3.5,0]),T(new THREE.CylinderGeometry(0.3,0.3,7,8),[-SCW-1.4,3.5,0])]);
+    arch.add(new THREE.Mesh(ap,wm(toon({color:0xffd92e}))));arch.add(new THREE.Mesh(inflate(ap,0.1),inkMat));
+    var ab=new THREE.Mesh(new THREE.PlaneGeometry(SCW*2+3.4,2.4),wm(new THREE.MeshBasicMaterial({map:archTex,side:THREE.DoubleSide})));ab.position.y=6.1;ab.rotation.y=Math.PI;arch.add(ab);
+    arch.position.set(b.X[aj],0,b.Z[aj]);arch.rotation.y=Math.atan2(b.TX[aj],b.TZ[aj]);world.add(arch);
   });
   if(ST.cliff){
     /* a slab hanging in the sky: skirts under both edges, rails only where the road runs straight */
     var skm=wm(new THREE.MeshBasicMaterial({color:0x9a6fd0,side:THREE.DoubleSide}));
     [-1,1].forEach(function(sd){
-      var pos=[],idx2=[],k;for(k=0;k<=N;k++){var q=k%N,ex=PX[q]-TZ[q]*RW*sd,ez=PZ[q]+TX[q]*RW*sd;pos.push(ex,0,ez,ex,-3.2,ez);if(k<N){var a=2*k;idx2.push(a,a+1,a+2,a+1,a+3,a+2);}}
+      var pos=[],idx2=[],k;for(k=0;k<=N;k++){var q=k%N,ew=(WH[q]+1.2)*sd,ex=PX[q]-TZ[q]*ew,ez=PZ[q]+TX[q]*ew;pos.push(ex,0,ez,ex,-3.2,ez);if(k<N){var a=2*k;idx2.push(a,a+1,a+2,a+1,a+3,a+2);}}
       var g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));g.setIndex(new THREE.BufferAttribute(new Uint16Array(idx2),1));world.add(new THREE.Mesh(g,skm));
       var rp=[],ru=[],ri=[],nv=0;
       for(k=0;k<N;k++){var q0=k,q1=(k+1)%N;if(CL[q0]||CL[q1])continue;
-        var x0=PX[q0]-TZ[q0]*(RW+0.1)*sd,z0=PZ[q0]+TX[q0]*(RW+0.1)*sd,x1=PX[q1]-TZ[q1]*(RW+0.1)*sd,z1=PZ[q1]+TX[q1]*(RW+0.1)*sd;
+        var e0=(WH[q0]+1.3)*sd,e1=(WH[q1]+1.3)*sd,x0=PX[q0]-TZ[q0]*e0,z0=PZ[q0]+TX[q0]*e0,x1=PX[q1]-TZ[q1]*e1,z1=PZ[q1]+TX[q1]*e1;
         rp.push(x0,0,z0,x0,1.5,z0,x1,0,z1,x1,1.5,z1);ru.push(k%2*0.5,0,k%2*0.5,1,k%2*0.5+0.5,0,k%2*0.5+0.5,1);ri.push(nv,nv+1,nv+2,nv+1,nv+3,nv+2);nv+=4;}
       var rg=new THREE.BufferGeometry();rg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(rp),3));rg.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(ru),2));rg.setIndex(new THREE.BufferAttribute(new Uint16Array(ri),1));
       world.add(new THREE.Mesh(rg,wm(new THREE.MeshBasicMaterial({map:railTex,alphaTest:0.5,side:THREE.DoubleSide}))));
@@ -929,9 +979,9 @@ function loadStage(idx){
   /* item boxes, boost pads, ramps, mud, sliding pillars */
   var mBox=wm(new THREE.SpriteMaterial({map:boxTex,alphaTest:0.5})),lanes=[-5.4,0,5.4];
   FEAT.boxes.forEach(function(bd){lanes.forEach(function(ln){
-    var sp=new THREE.Sprite(mBox);sp.scale.set(2.9,2.9,1);S(bd,sA);sp.position.set(sA.x+sA.rx*ln,1.8,sA.z+sA.rz*ln);world.add(sp);boxes.push({s:bd,x:ln,sp:sp,cd:0,ph:R()*6});});});
+    var lx=ln*wAt(bd)/W,sp=new THREE.Sprite(mBox);sp.scale.set(2.9,2.9,1);S(bd,sA);sp.position.set(sA.x+sA.rx*lx,1.8,sA.z+sA.rz*lx);world.add(sp);boxes.push({s:bd,x:lx,sp:sp,cd:0,ph:R()*6});});});
   FEAT.pads.forEach(function(p){decal(padTex,5.4,8,p.s,p.x,0.05,-2);pads.push(p);});
-  FEAT.muds.forEach(function(p){decal(mudTex,8.4,15,p.s,p.x,0.05,-2);muds.push(p);});
+  FEAT.muds.forEach(function(p){decal(mudTex,10.4,17,p.s,p.x,0.05,-2);muds.push(p);});
   FEAT.ramps.forEach(function(p){
     var g=new THREE.BufferGeometry();
     g.setAttribute('position',new THREE.BufferAttribute(new Float32Array([-3.4,0.06,-3,3.4,0.06,-3,-3.4,1.7,3,3.4,1.7,3, -3.4,0.06,3,3.4,0.06,3]),3));
@@ -1022,7 +1072,7 @@ function makeCars(grid){
   var gd=[-4,-10,-16,-22,-28,-34],gx=[-3,3,-3,3,-3,3];
   roster.forEach(function(r,i){
     var g=protos[r.c].clone();g.rotation.order='YXZ';scene.add(g);
-    var lv=r.lv||'free',base=lv==='mob'?51+(i%4)*1.1+Math.random()*0.8:(r.base||55.5+i*1.15+Math.random()*0.8);
+    var lv=r.lv||'free',base=lv==='mob'?52.5+(i%4)*1.1+Math.random()*0.8:(r.base||55.5+i*1.15+Math.random()*0.8);
     var c={i:i,g:g,dist:gd[grid[i]],x:gx[grid[i]],v:0,yaw:0,fin:null,ai:!!r.ai,own:false,name:r.n,
       br:-1,air:0,fall:0,mud:false,rAir:0,rAirOn:false,rFall:0,scFor:-1,scGo:false,lv:lv,cp:lv==='final'?0.1:0.16,scP:lv==='final'?0.85:lv==='boss'?0.6:lv==='mob'?0.2:0.35,
       stun:0,stunK:0,inv:0,boost:0,items:[],useT:0,holdT:0,lastBox:-1,fxK:0,fxT:0,sink:0,puff:0,
@@ -1148,7 +1198,7 @@ function useItem(c,idx){
   else if(it===2){var best=null,bd=1e9;for(i=0;i<cars.length;i++){o=cars[i];var d=o.dist-c.dist;if(o!==c&&d>1&&d<320&&d<bd){bd=d;best=o;}}
     if(!best){if(c===me)flash('前面沒有人',true);return false;}
     emit({k:'water',from:c.i,to:best.i});}
-  else if(it===3){var onB=c.br>=0&&BR[c.br],back=6.5*(onB?BR[c.br].ratio:1),lim=onB?0.4:W-WALL_W/2;
+  else if(it===3){var onB=c.br>=0&&BR[c.br],back=6.5*(onB?BR[c.br].ratio:1),lim=onB?0.4:Math.max(0.4,wAt(c.dist)-WALL_W/2);
     emit({k:'hole',id:c.i+'-'+(holeSeq++)+'-'+Math.floor(Math.random()*1e4),s:mod(c.dist-back),x:clamp(c.x,-lim,lim),br:onB?c.br:-1,from:c.i});sfx(120,0.2,'square',0.05);}
   else{c.boost=3;if(c===me)sfx(220,0.5,'sawtooth',0.06,660);}
   c.items.splice(idx,1);if(c===me)showItem();return true;
@@ -1170,7 +1220,7 @@ function tickStatus(c,dt,s){
   if(c.br>=0)return;
   for(i=0;i<pads.length;i++){t=pads[i];if(Math.abs(wrapD(t.s-s))<4.5&&Math.abs(t.x-c.x)<3.2&&c.boost<1.2&&c.stun<=0){c.boost=1.3;if(c===me)sfx(330,0.3,'sawtooth',0.05,500);}}
   for(i=0;i<ramps.length;i++){t=ramps[i];if(Math.abs(wrapD(t.s-s))<3.3&&Math.abs(t.x-c.x)<3.6&&c.stun<=0){c.air=AIR_T;c.boost=Math.max(c.boost,1.6);if(c===me){sfx(300,0.45,'triangle',0.07,700);}return;}}
-  for(i=0;i<muds.length;i++){t=muds[i];if(Math.abs(wrapD(t.s-s))<7.2&&Math.abs(t.x-c.x)<4)c.mud=true;}
+  for(i=0;i<muds.length;i++){t=muds[i];if(Math.abs(wrapD(t.s-s))<8.2&&Math.abs(t.x-c.x)<5){c.mud=true;c.boost=0;}}
   if(c.inv<=0)for(i=0;i<movers.length;i++){t=movers[i];if(Math.abs(wrapD(t.s-s))<2&&Math.abs(moverX(t,raceT)-c.x)<2.8){hit(c,3);break;}}
   grabBox(c,s);
 }
@@ -1193,11 +1243,11 @@ function driveAI(c,dt,now,avg){
   SP(c.dist,c.br,sA);var k=sA.k,i,o,d,tx,s=mod(c.dist),hw;
   if(c.br>=0){tx=0;hw=SCW-1.2;}
   else{
-    S(c.dist+35,sB);tx=clamp(-sB.k*260,-W*0.62,W*0.62)+c.lane;hw=W-1.6;
+    var wf=wAt(c.dist)/W;S(c.dist+35,sB);tx=(clamp(-sB.k*260,-W*0.62,W*0.62)+c.lane)*wf;hw=wAt(c.dist)-1.6;
     for(i=0;i<BR.length;i++){o=BR[i];d=o.s0-s;if(d>0&&d<75){if(c.scFor!==i){c.scFor=i;c.scGo=Math.random()<c.scP;}
       if(c.scGo)tx=o.side*(W-1.8);else if(tx*o.side>W-5.6)tx=o.side*(W-5.8);}}
     for(i=0;i<movers.length;i++){o=movers[i];d=wrapD(o.s-s);if(d>0&&d<28){var mxp=moverX(o,raceT+d/Math.max(20,c.v));if(Math.abs(mxp-c.x)<4.4)tx+=(c.x>=mxp?1:-1)*5.5;}}
-    for(i=0;i<muds.length;i++){o=muds[i];d=wrapD(o.s-s);if(d>-6&&d<30&&Math.abs(o.x-c.x)<4.6&&(c.i+i)%4!==0)tx+=(c.x>=o.x?1:-1)*5;}
+    for(i=0;i<muds.length;i++){o=muds[i];d=wrapD(o.s-s);if(d>-8&&d<32&&Math.abs(o.x-c.x)<5.8&&(c.i+i)%4!==0)tx+=(c.x>=o.x?1:-1)*6.5;}
   }
   for(i=0;i<cars.length;i++){o=cars[i];if(o===c||o.br!==c.br)continue;d=o.dist-c.dist;if(d>0&&d<16&&Math.abs(o.x-c.x)<2.9)tx+=(c.x>=o.x?1:-1)*3.6;}
   for(i=0;i<holes.length;i++){o=holes[i];if(o.dead||o.br!==c.br)continue;d=wrapD(o.s-s);if(d>0&&d<34&&Math.abs(o.x-c.x)<WALL_W/2+1.6&&(c.i*7+Math.floor(o.s))%5!==0)tx+=(c.x>=o.x?1:-1)*6;}
@@ -1207,7 +1257,7 @@ function driveAI(c,dt,now,avg){
   if(c.ai){if(c.lv==='boss'||c.lv==='final')band=gap<-60?1.04:1;else band=gap>70?0.93:gap<-70?1.06:1;}
   var tv=c.base*band*(1-Math.min(c.cp,Math.abs(k)*4.5))*(1+0.03*Math.sin(now*0.7+c.ph));
   if(c.boost>0)tv=Math.max(tv,VBOOST*0.9);
-  if(c.mud)tv=Math.min(tv,32);
+  if(c.mud)tv=Math.min(tv,20);
   if(c.br>=0)tv=Math.min(tv,LANE_V);
   if(c.stun>0)tv=c.stunK===1?12:c.stunK===2?34:0;
   c.v+=(tv-c.v)*(tv<c.v?2.4:1.2)*dt;
@@ -1228,16 +1278,18 @@ function drivePlayer(c,dt){
   SP(c.dist,c.br,sA);var k=sA.k,st=steerInput(),air=c.air>0,onB=c.br>=0;
   var stuck=c.stun>0&&c.stunK===3;
   steerVis=lerp(steerVis,stuck?0:st,1-Math.exp(-10*dt));c.yaw=steerVis;
-  var hw=onB?SCW:W,off=!air&&Math.abs(c.x)>hw+0.4,target=c.boost>0?VBOOST:VMAX;
+  var hw=onB?SCW:wAt(c.dist),off=!air&&Math.abs(c.x)>hw+0.4,target=c.boost>0?VBOOST:VMAX,sN=mod(c.dist),bi,bb,dd;
+  for(bi=0;bi<BR.length;bi++){bb=BR[bi];dd=bb.s0-sN;if(dd>0&&dd<100&&!onB){var hk=bi+'/'+Math.floor(c.dist/L);if(c.hint!==hk){c.hint=hk;flash(bb.side>0?'近路在右邊 →':'← 近路在左邊',true);sfx(990,0.12,'square',0.04);}}}
+  if(NAR&&sN>NAR.s0-60&&sN<NAR.s0){var nk='n/'+Math.floor(c.dist/L);if(c.hint!==nk){c.hint=nk;flash('前面變窄！',true);sfx(300,0.2,'square',0.05);}}
   if(onB)target=Math.min(target,LANE_V);
   if(off)target=Math.min(target,onB?24:30);
-  if(c.mud)target=Math.min(target,30);
+  if(c.mud)target=Math.min(target,17);
   if(c.stun>0)target=c.stunK===1?12:c.stunK===2?34:0;
   c.v+=(target-c.v)*(target>c.v?(c.boost>0?2.4:0.95):2.6)*dt;
   if(!stuck)c.x+=steerVis*STEER*(air?0.45:1)*(0.45+0.55*c.v/VMAX)*dt+(air?0:k*c.v*c.v*CENT*dt);
-  if(ST.cliff&&!onB&&!air&&Math.abs(c.x)>W+0.9){
+  if(ST.cliff&&!onB&&!air&&Math.abs(c.x)>hw+0.9){
     if(CL[sampleIdx(c.dist)]){c.fall=1.5;c.boost=0;c.stun=0;shake=0.5;flash('掉下去了！',true);sfx(500,0.9,'sawtooth',0.07,-440);return;}
-    c.x=clamp(c.x,-(W+0.9),W+0.9);c.v*=1-0.9*dt; /* scraping the rail */
+    c.x=clamp(c.x,-(hw+0.9),hw+0.9);c.v*=1-0.9*dt; /* scraping the rail */
   }
   var lim=hw+(onB?1.8:5);c.x=clamp(c.x,-lim,lim);
   advance(c,dt,k);
@@ -1408,7 +1460,7 @@ var game='free',storyK=0,cleared=0,storyChar=0,freeChar=0,talkCar=null;
 var UNLOCK={zan:0,uccu:1,look:2,oka:3,shuang:3,thx:4,bug:4,wed:5};
 try{cleared=clamp(parseInt(localStorage.getItem('zan-story')||'0',10)||0,0,5);}catch(e){}
 function unlocked(i){return cleared>=UNLOCK[CHARS[i].id];}
-function show(id){['home','story','talk','lobby','result'].forEach(function(s){$(s).hidden=s!==id;});hud.hidden=id!=='hud';}
+function show(id){['home','story','talk','unlock','lobby','result'].forEach(function(s){$(s).hidden=s!==id;});hud.hidden=id!=='hud';}
 function rowHtml(rank,r,extra,mine){return '<li'+(mine?' class="me"':'')+'><b>'+rank+'</b><img alt="" src="'+ASSETS[CHARS[r.c].id].img+'"><span>'+esc(r.n)+'</span><em>'+extra+'</em></li>';}
 function renderLobby(){
   var solo=net.mode==='solo',host=net.mode==='host';
@@ -1461,8 +1513,9 @@ function goHome(msg){closeNet();game='free';clearCars();clearFx();talkCar=null;s
 function renderStory(msg){
   var sp=$('spick'),i,h='';
   for(i=0;i<8;i++){var ok=unlocked(i);
-    h+='<button type="button" role="radio" data-i="'+i+'" aria-label="'+esc(CHARS[i].name)+(ok?'':'（未解鎖）')+'" aria-checked="'+(i===storyChar?'true':'false')+'"'+(ok?'':' aria-disabled="true"')+'><img alt="" src="'+ASSETS[CHARS[i].id].img+'"></button>';}
-  sp.innerHTML=h;
+    h+='<button type="button" role="radio" data-i="'+i+'"'+(newIds.indexOf(CHARS[i].id)>=0?' class="new"':'')+' aria-label=""'+esc(CHARS[i].name)+(ok?'':'（未解鎖）')+'" aria-checked="'+(i===storyChar?'true':'false')+'"'+(ok?'':' aria-disabled="true"')+'><img alt="" src="'+ASSETS[CHARS[i].id].img+'"></button>';}
+  sp.innerHTML=h;var nu=0;for(i=0;i<8;i++)if(unlocked(i))nu++;
+  sp.className=nu>1?'glow':'';$('swapTag').hidden=nu<2;
   h='';
   STAGES.forEach(function(st,k){
     var open=k<=cleared,done=k<cleared,el=ITEMS[st.el];
@@ -1503,7 +1556,16 @@ function storyWon(){
   var k=storyK,st=STAGES[k],msg='';
   if(k+1>cleared){cleared=k+1;try{localStorage.setItem('zan-story',String(cleared));}catch(e){}
     msg=k===4?'恭喜破關！八隻角色全部解鎖':'解鎖新角色：'+st.boss.map(function(id){return NAMES[id];}).join('、')+'　下一關開放了';}
-  goStory(msg);
+  if(msg&&k<5){newIds=st.boss.slice();unl.ids=st.boss.slice();unl.i=0;unl.msg=msg;showUnlock();}
+  else goStory(msg);
+}
+var unl={ids:[],i:0,msg:''},newIds=[];
+function showUnlock(){
+  var id=unl.ids[unl.i];clearCars();clearFx();talkCar=null;setPreview(charIdx(id));state='unlock';camInit=false;
+  $('unlName').textContent=NAMES[id];$('unlQuote').textContent='「'+QUOTE[id]+'」';$('unlImg').src=ASSETS[id].img;
+  $('unlBtn').textContent=unl.i<unl.ids.length-1?'下一隻':'太神啦';
+  show('unlock');var bx=$('unlCard');bx.classList.remove('pop');void bx.offsetWidth;bx.classList.add('pop');
+  sfx(523,0.12,'square',0.06);setTimeout(function(){sfx(659,0.12,'square',0.06);},120);setTimeout(function(){sfx(784,0.12,'square',0.06);},240);setTimeout(function(){sfx(1047,0.4,'square',0.06);},360);
 }
 function finish(){
   state='done';streaks.className='';show('result');
@@ -1528,12 +1590,13 @@ $('againBtn').addEventListener('click',function(){
   else if(net.mode==='solo')hostStart();
   else if(net.mode==='host'){clearCars();clearFx();setPreview(freeChar);state='lobby';sendLobby();show('lobby');}
 });
+$('unlBtn').addEventListener('click',function(){if(++unl.i<unl.ids.length)showUnlock();else goStory(unl.msg);});
 $('nextBtn').addEventListener('click',function(e){e.stopPropagation();nextLine();});
 $('skipBtn').addEventListener('click',function(e){e.stopPropagation();endTalk();});
 $('talkBox').addEventListener('click',nextLine);
 $('spick').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;var i=+b.getAttribute('data-i');
   if(!unlocked(i)){$('storyMsg').textContent='打贏第 '+UNLOCK[CHARS[i].id]+' 關的關主就能解鎖「'+CHARS[i].name+'」';$('storyMsg').style.color='#c0281c';return;}
-  storyChar=i;try{localStorage.setItem('zan-schar',CHARS[i].id);}catch(er){}setPreview(i);renderStory('');sfx(660,0.08,'square',0.04);});
+  storyChar=i;newIds=[];try{localStorage.setItem('zan-schar',CHARS[i].id);}catch(er){}setPreview(i);renderStory('');sfx(660,0.08,'square',0.04);});
 $('stages').addEventListener('click',function(e){var b=e.target.closest('button');if(b&&!b.disabled)startStory(+b.getAttribute('data-k'),false);});
 $('maps').addEventListener('click',function(e){var b=e.target.closest('button');if(!b||b.disabled||net.mode==='client')return;
   net.stage=+b.getAttribute('data-k');loadStage(net.stage);sendLobby();sfx(660,0.08,'square',0.04);});
@@ -1598,7 +1661,9 @@ function frame(ms){
     ease=state==='count'?1-Math.exp(-3.2*dt):1-Math.exp(-22*dt);
   }else{
     orbit+=dt*(reduce?0.08:0.32);var tg=(state==='talk'&&talkCar)?talkCar.g:(me?me.g:preview),pp=tg.position,rad=portrait?13:11;
-    camDes.set(pp.x+Math.cos(orbit)*rad,3.4,pp.z+Math.sin(orbit)*rad);lookDes.set(pp.x,state==='talk'?(portrait?-2.6:-1.6):(portrait?-4.6:-2.6),pp.z);
+    camDes.set(pp.x+Math.cos(orbit)*rad,3.4,pp.z+Math.sin(orbit)*rad);if(state==='unlock'){rad=portrait?9.5:8;orbit+=dt*0.5;}
+    camDes.set(pp.x+Math.cos(orbit)*rad,3.4,pp.z+Math.sin(orbit)*rad);lookDes.set(pp.x,state==='talk'?(portrait?-2.6:-1.6):state==='unlock'?(portrait?0.2:0.8):(portrait?-4.6:-2.6),pp.z);
+    var uc=state==='unlock';if(stage.classList.contains('unl')!==uc)stage.classList.toggle('unl',uc);
     ease=camInit?1-Math.exp(-2.5*dt):1;
   }
   camInit=true;
