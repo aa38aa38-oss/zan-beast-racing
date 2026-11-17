@@ -116,6 +116,12 @@ ol.list em{font-style:normal;font-size:14px;color:var(--mute);font-family:var(--
 #swapBtn img{width:44px;height:44px;border-radius:9px;border:3px solid var(--ink);object-fit:cover;background:#3f3f3f;flex:none}
 #swapBtn span{flex:1;min-width:0}
 #swapBtn em{font-style:normal;font-size:15px;color:var(--pen)}
+#askQ{font-size:22px;line-height:1.3;text-align:center}
+#askInfo{display:flex;justify-content:center;align-items:center;gap:10px}
+#askInfo img{width:64px;height:64px;border-radius:12px;border:3px solid var(--ink);object-fit:cover;background:#3f3f3f}
+#askInfo b{font-family:var(--num);font-weight:400;font-size:30px;color:#e8452c}
+#askInfo i{font-style:normal;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:20px;border:3px solid var(--ink)}
+#askName{font-size:clamp(38px,12vw,80px)}
 #quit{position:absolute;left:14px;top:62px;min-width:42px;height:42px;padding:0 10px;font-family:var(--display);font-size:20px;line-height:1;cursor:pointer;pointer-events:auto;border-radius:21px;opacity:.85}
 #quit.ask{background:#e8452c;color:#fff;opacity:1;font-size:17px}
 #cpick button[aria-disabled="true"]{filter:grayscale(1) brightness(.4);cursor:default}
@@ -205,6 +211,16 @@ ol.list em{font-style:normal;font-size:14px;color:var(--mute);font-family:var(--
       <img id="talkImg" alt="">
       <div><b id="talkName"></b><p id="talkText"></p></div>
       <div class="row"><button class="go alt" id="skipBtn" type="button">跳過</button><button class="go" id="nextBtn" type="button">繼續</button></div>
+    </div>
+  </section>
+
+  <section id="ask" class="screen" hidden>
+    <header><p class="tag out" id="askTag"></p><h1 class="out" id="askName"></h1></header>
+    <div class="card stk">
+      <p id="askQ">要開始這一關嗎？</p>
+      <div id="askInfo"></div>
+      <p class="msg" id="askMsg" role="status"></p>
+      <div class="row"><button class="go alt" id="askList" type="button">看全部關卡</button><button class="go" id="askGo" type="button">出發！</button></div>
     </div>
   </section>
 
@@ -1472,7 +1488,7 @@ var game='free',storyK=0,cleared=0,storyChar=0,freeChar=0,talkCar=null;
 var UNLOCK={zan:0,uccu:1,look:2,oka:3,shuang:3,thx:4,bug:4,wed:5};
 try{cleared=clamp(parseInt(localStorage.getItem('zan-story')||'0',10)||0,0,5);}catch(e){}
 function unlocked(i){return cleared>=UNLOCK[CHARS[i].id];}
-function show(id){['home','charsel','story','talk','unlock','lobby','result'].forEach(function(s){$(s).hidden=s!==id;});hud.hidden=id!=='hud';}
+function show(id){['home','charsel','ask','story','talk','unlock','lobby','result'].forEach(function(s){$(s).hidden=s!==id;});hud.hidden=id!=='hud';}
 function rowHtml(rank,r,extra,mine){return '<li'+(mine?' class="me"':'')+'><b>'+rank+'</b><img alt="" src="'+ASSETS[CHARS[r.c].id].img+'"><span>'+esc(r.n)+'</span><em>'+extra+'</em></li>';}
 function renderLobby(){
   var solo=net.mode==='solo',host=net.mode==='host';
@@ -1600,9 +1616,21 @@ $('cpick').addEventListener('click',function(e){var b=e.target.closest('button')
 $('csGo').addEventListener('click',function(){sfx(880,0.12,'square',0.05);var d=cs.done;if(d)d(cs.sel);});
 $('csBack').addEventListener('click',function(){var d=cs.back;if(d)d();});
 function pickStory(back){
-  openCharsel(false,storyChar,'故事模式　選角色',function(i){storyChar=i;newIds=[];try{localStorage.setItem('zan-schar',CHARS[i].id);}catch(er){}goStory(pickMsg);pickMsg='';},back);
+  openCharsel(false,storyChar,'故事模式　選角色',function(i){storyChar=i;newIds=[];try{localStorage.setItem('zan-schar',CHARS[i].id);}catch(er){}var m=pickMsg;pickMsg='';if(cleared<STAGES.length)askNext(m);else goStory(m);},back);
 }
-var pickMsg='';
+var pickMsg='',askMsg='';
+/* right after choosing a car: offer the next unbeaten stage straight away */
+function askNext(msg){
+  var k=cleared,st=STAGES[k],el=ITEMS[st.el];askMsg=msg||'';
+  closeNet();game='story';clearCars();clearFx();talkCar=null;loadStage(k);setPreview(storyChar);state='pick';camInit=false;
+  $('askTag').textContent='第 '+(k+1)+' 關';$('askName').textContent=st.name;
+  $('askInfo').innerHTML='<img alt="" src="'+ASSETS[CHARS[storyChar].id].img+'"><b>VS</b>'+st.boss.map(function(id){return '<img alt="'+NAMES[id]+'" src="'+ASSETS[id].img+'">';}).join('')
+    +(el?'<i style="background:'+el.col+'">'+el.ch+'</i>':'<i style="background:#141414">王</i>');
+  $('askMsg').textContent=askMsg;$('askMsg').style.color='var(--pen)';
+  show('ask');
+}
+$('askGo').addEventListener('click',function(){startStory(cleared,false);});
+$('askList').addEventListener('click',function(){goStory(askMsg);});
 function setFree(i){freeChar=i;try{localStorage.setItem('zan-char',CHARS[i].id);}catch(er){}}
 function backHome(){goHome('');}
 $('storyBtn').addEventListener('click',function(){pickMsg='';pickStory(backHome);});
